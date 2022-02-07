@@ -13,7 +13,7 @@ Jinja2==3.0.3
 jsonschema==3.2.0
 MarkupSafe==2.0.1
 parsedate==0.0.1
-Pillow==7.0.0
+Pillow==9.0.0
 python-dateutil==2.7.3
 python-magic==0.4.25
 rfc3986==2.0.0
