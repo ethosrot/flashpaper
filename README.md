@@ -14,9 +14,9 @@ Follow the following steps to start up a HTTP fmrl server on port 5000. PLEASE N
 git clone git@github.com:ethosrot/flashpaper.git
 cd flashpaper
 docker build -t flashpaper .
-docker run -d --name flashpaper-server -p 5000:5000 -v ./avatars:/usr/src/app/avatars -v ./data:/usr/src/app/data flashpaper
+docker run -d --name flashpaper-server -p 5000:5000 -v avatars:/usr/src/app/avatars -v data:/usr/src/app/data flashpaper
 ```
-The above assumes persistently storing avatars and the database in the app directory. Adjust -v mounts to match if you prefer to store your data elsewhere.
+The above assumes persistently storing avatars and the database in named volumes. Adjust -v mounts to match if you prefer to store your data elsewhere.
 
 ### License
 
