@@ -11,7 +11,7 @@ Currently, flashpaper may be deployed as a standalone flask app or as a docker i
 Follow the following steps to start up a HTTP fmrl server on port 5000. PLEASE NOTE that you will need to proxy this behind an HTTPS-capable reverse proxy to be compliant.
 
 ```shell
-git clone address
+git clone git@github.com:ethosrot/flashpaper.git
 cd flashpaper
 docker build -t flashpaper .
 docker run -d --name flashpaper-server -p 5000:5000 -v ./avatars:/usr/src/app/avatars -v ./data:/usr/src/app/data flashpaper
