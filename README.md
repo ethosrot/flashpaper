@@ -30,6 +30,6 @@ There is currently no user management interface. Users may be added by running t
 ```shell
 docker exec -it flashpaper-server ./utility.sh create-user <username> <password>
 ```
-### License
+## License
 
 MIT.
