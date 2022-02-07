@@ -1,19 +1,21 @@
 # Application Imports
 from application import db, httpauth
-from .models import JsonLengthInputs, JsonTypeInputs, User, UserStatus, UserAvatar, Follow
+from .models import JsonLengthInputs, JsonTypeInputs, User, UserFollow
 from flask import current_app as app
+from rfc3986 import is_valid_uri, normalize_uri
 import re
-import os
 
 # Main Imports
-from flask import Response, request, json
-from passlib.hash import sha256_crypt # Replace with werkzeug.security?
+from flask import Response, request, json, send_from_directory
+from flask_cors import cross_origin
 from emoji_data import EmojiSequence
 
 # Avatar Imports
+from werkzeug.security import safe_join
 from PIL import Image
 from io import BytesIO
 import magic
+from os import path
 
 
 # Timestamp Imports
@@ -22,8 +24,16 @@ from dateutil.parser import parse as parsedate
 from email.utils import formatdate
 from calendar import timegm
 
+### helpers
+
 def update_user_timestamp(user: User):
     user.last_updated = datetime.utcnow().replace(microsecond=0)
+    return int(datetime.now().timestamp())
+
+def is_valid_username(username: str):
+    return re.match(pattern=r"^@[a-zA-Z0-9_]{1,40}@(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$", string=username)
+
+### fmrl core routes
 
 @app.route('/.well-known/fmrl/user/<username>/avatar', methods=['PUT'])
 @httpauth.login_required
@@ -68,12 +78,12 @@ def update_user_avatar(username: str):
     
     # Stream buffer back to file on disk
     # TODO - Beef up security here
-    with open(os.path.join(app.config['AVATARS_DIR'], user.username), "bw") as file:
+    with open(safe_join(app.config['AVATARS_DIR'], user.username), "bw") as file:
         file.write(image_bytes.getbuffer())
 
     # Update user and timestamp, return success
     user.avatar.original = "/.well-known/fmrl/avatars/{}".format(user.username)
-    update_user_timestamp(user)
+    user.avatar.original_key = update_user_timestamp(user)
     db.session.commit()
     return Response("Success.", 200)
 
@@ -114,6 +124,11 @@ def update_user_status(username: str):
     if request.json.get('media_type') is not None:
         update['media_type'] = request.json['media_type']
 
+    if request.json.get('uri') is not None:
+        if not is_valid_uri(request.json['uri']):
+            return Response("Invalid URI.", 400)
+        update['uri'] = normalize_uri(request.json['uri'])
+
     # Validation passed. Update user and times
     if update:
         for field in update:
@@ -122,6 +137,7 @@ def update_user_status(username: str):
         db.session.commit()
     return Response("Success.", status=200)
 
+@cross_origin()
 @app.route('/.well-known/fmrl/users', methods=['GET'])
 def get_user_statuses():
     # Basic request validation
@@ -172,8 +188,8 @@ def get_user_status(username: str, query_time=None):
     # Empty responses are valid, should return only values which are set
     user_status = {}
     if user.avatar.original is not None:
-        user_status['avatar'] = {"original": user.avatar.original}
-    for field in {"name", "status", "emoji", "media", "media_type"}:
+        user_status['avatar'] = {"original": "{}?{}".format(user.avatar.original, user.avatar.original_key)}
+    for field in {"name", "status", "emoji", "media", "media_type", "uri"}:
         e = getattr(user.status_data, field)
         if e is not None:
             user_status[field] = e
@@ -183,8 +199,87 @@ def get_user_status(username: str, query_time=None):
     response.headers['Last-Modified'] = formatdate(timeval=timegm(user.last_updated.timetuple()), localtime=False, usegmt=True)
     return response
 
+### fmrl following routes
 
-## Catch Invalid Routes
+@app.route('/.well-known/fmrl/user/<username>/following', methods=['GET'])
+@httpauth.login_required
+def get_user_following(username):
+    user = User.query.filter_by(username=username).first()
+    if user is None:
+        return Response("No such user found.", status=404)
+    if user.username != httpauth.current_user().username:
+        return Response("Unauthenticated.", 403)
+    user_follows = []
+    if user.follows is not None:
+        for follow in user.follows:
+            user_follows.append(follow.username)
+    return Response(json.dumps(user_follows), status=200, mimetype='application/json')
+
+@app.route('/.well-known/fmrl/user/<username>/following', methods=['PATCH'])
+@httpauth.login_required
+def set_user_following(username: str):
+    user = User.query.filter_by(username=username).first()
+    if user is None:
+        return Response("No such user found.", status=404)
+    if user.username != httpauth.current_user().username:
+        return Response("Unauthenticated.", 403)
+    
+    success = False
+    for action in {"add", "remove"}:
+        if type(request.json.get(action)) is list:
+            for name in request.json[action]:
+                if not is_valid_username(name):
+                    return Response("Invalid username(s).", 400)
+                if action == "add":
+                    success = True
+                    if user.follows.filter_by(username=name).first() is None:
+                        user.follows.append(UserFollow(username=name))
+                else:
+                    success = True
+                    follow = user.follows.filter_by(username=name).first()
+                    if follow is not None:
+                        user.follows.remove(follow)
+    if success:
+        db.session.commit()
+        return Response(None, status=200)
+    else:
+        return Response("Invalid request.", status=400)
+
+
+
+
+    if type(request.json.get('add')) is list:
+        for action in {"add", "remove"}:
+            for name in request.json[action]:
+                success = True
+
+        for name in request.json['add']:
+            success = True
+            print(name)
+    if type(request.json.get('remove')) is list:
+        for name in request.json['remove']:
+            success = True
+            print(name)
+
+
+### flashpaper routes
+
+# TODO - Implement multiple resolution support
+@cross_origin()
+@app.route('/.well-known/fmrl/avatars/<username>', methods=['GET'])
+def get_user_avatar(username: str):
+    user = User.query.filter_by(username=username).first()
+    if user is None:
+        return Response("No such user found.", status=404)
+    image_path = safe_join(app.config['AVATARS_DIR'], username)
+    if path.exists(image_path):
+        mime_type = magic.from_file(image_path, mime=True)
+        with open(image_path, "r") as image:
+            return send_from_directory(app.config['AVATARS_DIR'], username, mimetype=mime_type)
+    else:
+        return Response("No such image found.", status=404)
+
+### invalid routes
 
 @app.route('/.well-known/fmrl/', defaults={'path': ''})
 @app.route('/.well-known/fmrl/<path:path>')

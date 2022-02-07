@@ -12,11 +12,11 @@ class User(db.Model):
     last_updated = db.Column(db.DateTime)
 
     # User Configurables
-    avatar = db.relationship('UserAvatar', uselist=False, backref='users')
-    status_data = db.relationship('UserStatus', uselist=False, backref='users')
+    avatar = db.relationship('UserAvatar', uselist=False, backref='users', cascade='all, delete-orphan')
+    status_data = db.relationship('UserStatus', uselist=False, backref='users', cascade='all, delete-orphan')
 
     # Following API
-    follows = db.relationship('Follow', uselist=False, backref='users')
+    follows = db.relationship('UserFollow', backref='users', lazy='dynamic', cascade='all, delete-orphan')
 
     def save(self):
         db.session.add(self)
@@ -37,6 +37,7 @@ class UserStatus(db.Model):
     emoji = db.Column(db.String)
     media = db.Column(db.String)
     media_type = db.Column(db.Integer)
+    uri = db.Column(db.String)
 
 class UserAvatar(db.Model):
     __tablename__ = 'avatars'
@@ -47,14 +48,13 @@ class UserAvatar(db.Model):
     original = db.Column(db.String)
     original_key = db.Column(db.String)
 
-class Follow(db.Model):
+class UserFollow(db.Model):
     __tablename__ = 'follows'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
 
     # User Follow Data
     username = db.Column(db.String)
-    server = db.Column(db.String)
 
 class JsonLengthInputs(Inputs):
     json = [JsonSchema(schema={
@@ -85,6 +85,8 @@ class JsonTypeInputs(Inputs):
                 'type': 'string'
             }, 'media_type': {
                 'type': 'integer'
+            }, 'uri': {
+                'type': 'string'
             }
         },
         'additionalProperties': True,
