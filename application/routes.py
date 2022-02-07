@@ -245,23 +245,6 @@ def set_user_following(username: str):
     else:
         return Response("Invalid request.", status=400)
 
-
-
-
-    if type(request.json.get('add')) is list:
-        for action in {"add", "remove"}:
-            for name in request.json[action]:
-                success = True
-
-        for name in request.json['add']:
-            success = True
-            print(name)
-    if type(request.json.get('remove')) is list:
-        for name in request.json['remove']:
-            success = True
-            print(name)
-
-
 ### flashpaper routes
 
 # TODO - Implement multiple resolution support
