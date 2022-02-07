@@ -1,0 +1,11 @@
+version: '3'
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - ./avatars:/usr/src/app/avatars
+      - ./data:/usr/src/app/data
+    ports:
+      - 5000:5000
