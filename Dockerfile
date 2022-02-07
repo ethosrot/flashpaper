@@ -12,6 +12,7 @@ RUN pip install -r requirements.txt
 COPY cli.py /usr/src/app/cli.py
 COPY config.py /usr/src/app/config.py
 COPY wsgi.py /usr/src/app/wsgi.py
+COPY utility.sh /usr/src/app/utility.sh
 
 COPY application /usr/src/app/application
 

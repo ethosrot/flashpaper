@@ -18,6 +18,18 @@ docker run -d --name flashpaper-server -p 5000:5000 -v avatars:/usr/src/app/avat
 ```
 The above assumes persistently storing avatars and the database in named volumes. Adjust -v mounts to match if you prefer to store your data elsewhere.
 
+## User Management
+There is currently no user management interface. Users may be added by running the following:
+
+*Standalone:*
+```shell
+./utility.sh create-user <username> <password>
+```
+
+*Docker:*
+```shell
+docker exec -it flashpaper-server ./utility.sh create-user <username> <password>
+```
 ### License
 
 MIT.
