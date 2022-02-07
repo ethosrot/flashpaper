@@ -1,5 +1,7 @@
 # flashpaper
-flashpaper is a Flask server implementation of the [fmrl](https://github.com/makeworld-the-better-one/fmrl) protocol.
+flashpaper is a Flask server implementation of the [fmrl](https://github.com/makeworld-the-better-one/fmrl) protocol, currently supporting version 0.1.1 of the core+following APIs.
+
+flashpaper also implements an avatar hosting and delivery serivice to compliment the fmrl spec.
 
 ## Install
 Currently, flashpaper may be deployed as a standalone flask app or as a docker image. The app does not include HTTPS support out of the box, so you will likely want to deploy this app in conjunction with an SSL-capable reverse-proxy.
