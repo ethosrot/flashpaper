@@ -17,6 +17,7 @@ class User(db.Model):
 
     # Following API
     follows = db.relationship('UserFollow', backref='users', lazy='dynamic', cascade='all, delete-orphan')
+    follows_updated = db.Column(db.DateTime)
 
     def save(self):
         db.session.add(self)

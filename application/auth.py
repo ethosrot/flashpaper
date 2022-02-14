@@ -23,6 +23,7 @@ def create_user(username, password):
     new_user.avatar = UserAvatar()
     new_user.status_data = UserStatus()
     new_user.last_updated = datetime.utcnow().replace(microsecond=0)
+    new_user.follows_updated = datetime.utcnow().replace(microsecond=0)
     new_user.save()
     print("User '{}' created.".format(username))
 

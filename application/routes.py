@@ -42,9 +42,9 @@ def update_user_avatar(username: str):
     # Request Validation
     user = User.query.filter_by(username=username).first()
     if user is None:
-        return Response("No such user found.", 404)
+        return Response("No such user found.", status=404)
     if user.username != httpauth.current_user().username:
-        return Response("Unauthenticated.", 403)
+        return Response("Unauthenticated.", status=403)
     
     # Grab first chunk for MIME analysis
     file_size = 0
@@ -56,7 +56,7 @@ def update_user_avatar(username: str):
 
     # Validate file magic
     if file_type not in app.config['ALLOWED_UPLOAD_TYPES']:
-        return Response("Image not recognized as JPEG or PNG.", 400)
+        return Response("Image not recognized as JPEG or PNG.", status=400)
 
     # Read image into buffer and validate file size.
     while True:
@@ -66,7 +66,7 @@ def update_user_avatar(username: str):
         else:
             file_size += len(chunk)
             if file_size > app.config['UPLOAD_MAX_SIZE']:
-                return Response("File too large.", 413)
+                return Response("File too large.", status=413)
             chunk = request.stream.read(chunk_size)
             if len(chunk) == 0:
                 break
@@ -74,7 +74,7 @@ def update_user_avatar(username: str):
     
     img = Image.open(image_bytes)
     if img.height != img.width:
-        return Response("Image must be square.", 400)
+        return Response("Image must be square.", status=400)
     
     # Stream buffer back to file on disk
     # TODO - Beef up security here
@@ -85,7 +85,7 @@ def update_user_avatar(username: str):
     user.avatar.original = "/.well-known/fmrl/avatars/{}".format(user.username)
     user.avatar.original_key = update_user_timestamp(user)
     db.session.commit()
-    return Response("Success.", 200)
+    return Response("Success.", status=200)
 
 @app.route('/.well-known/fmrl/user/<username>', methods=['PATCH'])
 @httpauth.login_required
@@ -94,39 +94,39 @@ def update_user_status(username: str):
     # Request Validation
     user = User.query.filter_by(username=username).first()
     if user is None:
-        return Response("No such user found.", 404)
+        return Response("No such user found.", status=404)
     if user.username != httpauth.current_user().username:
-        return Response("Unauthenticated.", 403)
+        return Response("Unauthenticated.", status=403)
     
     # Schema Validation
     if not JsonLengthInputs(request).validate():
-        return Response("Update field(s) too long!", 413)
+        return Response("Update field(s) too long!", status=413)
     if not JsonTypeInputs(request).validate():
-        return Response("Update fields not a valid type.", 400)
+        return Response("Update fields not a valid type.", status=400)
     
     # Semantic Validation
     update = {} 
     if request.json.get('avatar') is not None:
-        return Response("Invalid endpoint for updating avatar.", 400)
+        return Response("Invalid endpoint for updating avatar.", status=400)
     
     if request.json.get('emoji') is not None:
         if not request.json['emoji'] in EmojiSequence and request.json['emoji']:
-            return Response("Invalid emoji.", 400)
+            return Response("Invalid emoji.", status=400)
         update['emoji'] = request.json['emoji']
 
     regex = re.compile('[\u0000-\u001F\u007F\u0080-\u009F]')
     for field in {"status", "media", "name"}:
         if request.json.get(field) is not None:
             if regex.search(request.json.get(field)) is not None:
-                return Response("Invalid unicode character(s).", 400)
+                return Response("Invalid unicode character(s).", status=400)
             update[field] = request.json[field]
     
     if request.json.get('media_type') is not None:
         update['media_type'] = request.json['media_type']
 
     if request.json.get('uri') is not None:
-        if not is_valid_uri(request.json['uri']):
-            return Response("Invalid URI.", 400)
+        if not is_valid_uri(request.json['uri']) or len(request.json['uri'].encode('utf-8') > 500):
+            return Response("Invalid URI.", status=400)
         update['uri'] = normalize_uri(request.json['uri'])
 
     # Validation passed. Update user and times
@@ -208,12 +208,25 @@ def get_user_following(username):
     if user is None:
         return Response("No such user found.", status=404)
     if user.username != httpauth.current_user().username:
-        return Response("Unauthenticated.", 403)
+        return Response("Unauthenticated.", status=403)
+
+    # If requested, send only updates newer than specified
+    if request.headers.get('If-Modified-Since') is not None:
+        query_time = parsedate(request.headers['If-Modified-Since']).replace(tzinfo=None)
+    if query_time is not None and query_time >= user.follows_updated:
+        response = Response(None, status=304)
+        response.headers['Last-Modified'] = formatdate(timeval=timegm(user.follows_updated.timetuple()), localtime=False, usegmt=True)
+        return response
+
     user_follows = []
     if user.follows is not None:
         for follow in user.follows:
             user_follows.append(follow.username)
-    return Response(json.dumps(user_follows), status=200, mimetype='application/json')
+
+    # Return successful response and user data
+    response = Response(json.dumps(user_follows), status=200, mimetype='application/json')
+    response.headers['Last-Modified'] = formatdate(timeval=timegm(user.follows_updated.timetuple()), localtime=False, usegmt=True)
+    return response
 
 @app.route('/.well-known/fmrl/user/<username>/following', methods=['PATCH'])
 @httpauth.login_required
@@ -222,14 +235,14 @@ def set_user_following(username: str):
     if user is None:
         return Response("No such user found.", status=404)
     if user.username != httpauth.current_user().username:
-        return Response("Unauthenticated.", 403)
+        return Response("Unauthenticated.", status=403)
     
     success = False
     for action in {"add", "remove"}:
         if type(request.json.get(action)) is list:
             for name in request.json[action]:
                 if not is_valid_username(name):
-                    return Response("Invalid username(s).", 400)
+                    return Response("Invalid username(s).", status=400)
                 if action == "add":
                     success = True
                     if user.follows.filter_by(username=name).first() is None:
@@ -240,6 +253,7 @@ def set_user_following(username: str):
                     if follow is not None:
                         user.follows.remove(follow)
     if success:
+        user.follows_updated = datetime.utcnow().replace(microsecond=0)
         db.session.commit()
         return Response(None, status=200)
     else:
@@ -267,4 +281,4 @@ def get_user_avatar(username: str):
 @app.route('/.well-known/fmrl/', defaults={'path': ''})
 @app.route('/.well-known/fmrl/<path:path>')
 def invalid_endpoint(path):
-    return Response("Invalid API endpoint.", 405)
+    return Response("Invalid API endpoint.", status=405)
