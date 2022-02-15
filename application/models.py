@@ -19,6 +19,9 @@ class User(db.Model):
     follows = db.relationship('UserFollow', backref='users', lazy='dynamic', cascade='all, delete-orphan')
     follows_updated = db.Column(db.DateTime)
 
+    # Flashpaper Webhooks API
+    webhooks = db.relationship('UserWebhook', backref='users', lazy='dynamic', cascade='all, delete-orphan')
+
     def save(self):
         db.session.add(self)
         db.session.commit()
@@ -56,6 +59,17 @@ class UserFollow(db.Model):
 
     # User Follow Data
     username = db.Column(db.String)
+
+class UserWebhook(db.Model):
+    __tablename__ = 'webhooks'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+
+    # User Webhook Data
+    url = db.Column(db.String)
+    method = db.Column(db.String)
+    latest_response = db.Column(db.Integer)
+    latest_timestamp = db.Column(db.DateTime)
 
 class JsonLengthInputs(Inputs):
     json = [JsonSchema(schema={

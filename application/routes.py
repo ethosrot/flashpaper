@@ -1,6 +1,6 @@
 # Application Imports
 from application import db, httpauth
-from .models import JsonLengthInputs, JsonTypeInputs, User, UserFollow
+from .models import JsonLengthInputs, JsonTypeInputs, User, UserFollow, UserWebhook
 from flask import current_app as app
 from rfc3986 import is_valid_uri, normalize_uri
 import re
@@ -17,12 +17,14 @@ from io import BytesIO
 import magic
 from os import path
 
-
 # Timestamp Imports
 from datetime import datetime
 from dateutil.parser import parse as parsedate
 from email.utils import formatdate
 from calendar import timegm
+
+# Webhooks Imports
+from urllib.parse import urlparse
 
 ### helpers
 def is_valid_user(username: str):
@@ -147,7 +149,7 @@ def update_user_status(username: str):
         update['media_type'] = request.json['media_type']
 
     if request.json.get('uri') is not None:
-        if not is_valid_uri(request.json['uri']) or len(request.json['uri'].encode('utf-8') > 500):
+        if not is_valid_uri(request.json['uri']) or len(request.json['uri'].encode('utf-8')) > 500:
             return invalid_request_response("Invalid URI")
         update['uri'] = normalize_uri(request.json['uri'])
 
@@ -283,6 +285,68 @@ def get_user_avatar(username: str):
             return send_from_directory(app.config['AVATARS_DIR'], username, mimetype=mime_type)
     else:
         return Response("No such image found.", status=404)
+
+@app.route('/.well-known/fmrl/user/<username>/webhooks', methods=['POST'])
+@httpauth.login_required
+def add_user_webhook(username):
+    user = is_authorized_user(username, httpauth.current_user().username)
+    if user is None:
+        return unauthorized_response()
+    
+    if request.json.get('url') is not None:
+        parsed_url = urlparse(request.json['url'])
+        if parsed_url.scheme not in {"http", "https"}:
+            return invalid_request_response("Webhooks must use HTTP or HTTPS")
+        if parsed_url.username or parsed_url.password:
+            return invalid_request_response("Webhooks must not contain credentials")
+        if parsed_url.params or parsed_url.query or parsed_url.fragment:
+            return invalid_request_response("Webhooks must not contain a parameter, querystring, or fragment")
+    
+    if request.json.get('method') is not None:
+        if request.json['method'].upper() not in {"GET", "POST"}:
+            return invalid_request_response("Method must be GET or POST")
+    else:
+        return invalid_request_response("Missing method")
+
+    if user.webhooks.filter_by(url=parsed_url.geturl()).first() is None:
+        user.webhooks.append(UserWebhook(url=parsed_url.geturl(), method=request.json['method'].upper()))
+        db.session.commit()
+
+    return Response("Success", status=200)
+
+@app.route('/.well-known/fmrl/user/<username>/webhooks/<webhook_id>', methods=['DELETE'])
+@httpauth.login_required
+def delete_user_webhook(username, webhook_id):
+    user = is_authorized_user(username, httpauth.current_user().username)
+    if user is None:
+        return unauthorized_response()
+
+    try:
+        id = int(webhook_id)
+    except (TypeError, ValueError):
+        return invalid_request_response("Invalid or missing Webhook ID")
+    
+    webhook = user.webhooks.filter_by(id=id).first()
+    if webhook is None:
+        return invalid_request_response("Invalid or missing Webhook ID")
+    user.webhooks.remove(webhook)
+    db.session.commit()
+    return Response(None, status=200)
+
+
+@app.route('/.well-known/fmrl/user/<username>/webhooks', methods=['GET'])
+@httpauth.login_required
+def get_user_webhooks(username):
+    user = is_authorized_user(username, httpauth.current_user().username)
+    if user is None:
+        return unauthorized_response()
+    
+    user_webhooks = []
+    if user.webhooks is not None:
+        for webhook in user.webhooks:
+            user_webhooks.append({"id": webhook.id, "url": webhook.url, "method": webhook.method})
+    
+    return Response(json.dumps(user_webhooks), status=200, mimetype='application/json')
 
 ### invalid routes
 

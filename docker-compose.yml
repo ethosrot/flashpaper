@@ -7,5 +7,7 @@ services:
     volumes:
       - ./avatars:/usr/src/app/avatars
       - ./data:/usr/src/app/data
+    environment:
+      - FLASHPAPER_PROXIED=true
     ports:
       - 5000:5000
