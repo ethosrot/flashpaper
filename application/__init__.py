@@ -19,8 +19,7 @@ def init_app():
     app.config.from_object('config.DevelopmentConfig')
 
   # Check if we're behind a HTTPS Proxy
-  if environ.get('FLASHPAPER_PROXIED') == "true":
-    print("Proxy mode set.")
+  if app.config['IS_PROXIED']:
     app.wsgi_app = ProxyFix(app.wsgi_app)
 
   # Initialize

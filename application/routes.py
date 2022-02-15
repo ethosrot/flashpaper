@@ -292,6 +292,12 @@ def add_user_webhook(username):
     user = is_authorized_user(username, httpauth.current_user().username)
     if user is None:
         return unauthorized_response()
+
+    if not app.config['WEBHOOKS_ENABLED']:
+        return invalid_request_response("Webhooks are not enabled", 403)
+    
+    if user.webhooks.count() >= app.config['MAX_WEBHOOKS']:
+        return invalid_request_response("Already at maximum configured webhooks")
     
     if request.json.get('url') is not None:
         parsed_url = urlparse(request.json['url'])
@@ -321,6 +327,9 @@ def delete_user_webhook(username, webhook_id):
     if user is None:
         return unauthorized_response()
 
+    if not app.config['WEBHOOKS_ENABLED']:
+        return invalid_request_response("Webhooks are not enabled", 403)
+
     try:
         id = int(webhook_id)
     except (TypeError, ValueError):
@@ -341,6 +350,9 @@ def get_user_webhooks(username):
     if user is None:
         return unauthorized_response()
     
+    if not app.config['WEBHOOKS_ENABLED']:
+        return invalid_request_response("Webhooks are not enabled", 403)
+
     user_webhooks = []
     if user.webhooks is not None:
         for webhook in user.webhooks:

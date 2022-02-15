@@ -8,6 +8,7 @@ services:
       - ./avatars:/usr/src/app/avatars
       - ./data:/usr/src/app/data
     environment:
-      - FLASHPAPER_PROXIED=true
+      - FLASHPAPER_USING_PROXY=TRUE
+      - FLASHPAPER_WEBHOOKS_ENABLED=TRUE
     ports:
       - 5000:5000
